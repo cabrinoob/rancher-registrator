@@ -1,41 +1,40 @@
+### Introduction
+The aim of this project is to achieve a third party registration in consul for every containers deployed through rancher. Since the release of Rancher v1.2.0 and its migration to the CNI framework, registrator is'nt able to see containers port mappings anymore.
+
+Rancher-registrator relies on the docker.sock and the rancher metadata API to do its job.
+
+### Requierments & limitations
+Rancher-registrator is made to run in a container on each host of your infrastructure. It needs to be deployed alongside a local consul-agent to register its services.
+
+For now, Rancher-registrator only registers its service into Consul backend. **Etcd and Zookeeper are'nt yet supported**.
+
 ### Instructions
 
-Commande de lancement
+**launch command**
 
-    docker run -it --net=host -v /var/run/docker.sock:/var/run/docker.sock --label io.rancher.container.network=true --label io.rancher.container.dns=true  --name=docker-listener docker-listener
-    
-Le composant se connecte au fichier docker.sock local puis il écoute les évènements "start" et "stop" émis par le npm "docker-events"
+    docker run -it --net=host -v /var/run/docker.sock:/var/run/docker.sock --label io.rancher.container.network=true --label io.rancher.container.dns=true  --name=registrator Rancher-registrator
 
-#### On Start
+**Optional environment vars**
 
-sur le démarrage d'un conteneur, le workflow suivant s'éxecute :
+You can set 2 environment variables :
 
-    getMetaData(name)
-    .then(filterMetaData)
-    .then(checkForPortMapping)
-    .then(checkForServiceIgnoreLabel)
-    .then(checkForServiceNameLabel)
-    .then(checkForHealthCheckLabel)
-    .then(registerService)
-    
-Suite à l'émission de l'évènement, flying-potatoe récupère les méta-données de rancher, puis filtre ces méta-données en fonction du nom du conteneur qui vient d'arriver.
-Ensuite, on vérifie si il comporte un mapping de ports. Si ce n'est pas le cas, on interrompt le processus. Par contre, si il y a un ou plusieurs ports mappés on poursuit en vérifiant si on a spécifié un label SERVICE_NAME.
-Ensuite, on vérifie si il y a un SERVICE_CHECK de déclaré et enfin on enregistre le service dans consul.
+ - SVC_PREFIX is used to prefix the service name into consul (for testing purpose)
+ - LOCAL_CONSUL_AGENT defaults to "http://localhost:8500" and it can be changed if necessary.
 
-#### Unique ID dans consul
+### Labels
 
-Lorsqu'on enregistre un service dans consul on doit lui attribuer un identifiant unique. L'UUID du conteneur ne suffit pas car un même conteneur peut exposer plusiuers ports différents et il faudra donc créer plusieurs entrées dans consul.
-En conséquence, l'identifiant unique d'un service est composé de la façon suivante :
+We have ported the very basic labels offered by the original registrator : 
 
-    <uuid>:<exposed-port>[:udp if udp]
+**SERVICE_NAME** : Allows you to override the service name registered in consul
 
-#### On Stop
+**SERVICE_IGNORE** : Set to true, it allows you to ignore the service registration.
 
-sur l'arrêt d'un conteneur, le workflow suivant s'éxecute :
+**SERVICE_TAGS**: An comma-delimited list of strings used as tags in consul. (note : JSON is not allowed for now)
 
-    getMetaData(name)
-    .then(filterMetaData)
-    .then(checkForPortMapping)
-    .then(deregisterService)
-    
-Ici, flying-potatoe doit quand même faire appel à l'API de méta-données de rancher afin de reconsituer l'ID du ou des servicese à désenregistrer.
+**SERVICE_[private_port]_CHECK_HTTP** : Allows you to declare an healthcheck at the same time you register your service in consul. The value of this label is the path to check. Exemple :
+
+    SERVICE_9000_CHECK_HTTP = /api/ping
+
+**SERVICE_[private_port]_CHECK_INTERVAL** : Defines the frequency of the healthCheck. The default value is 10s. 
+
+**SERVICE_[private_port]_CHECK_TIMEOUT** : Defines the timeout from which the healthcheck is considered as "not passing".
