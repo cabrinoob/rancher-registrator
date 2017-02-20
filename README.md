@@ -21,7 +21,7 @@ It also needs to be mapped on the docker.sock file of the host :
 
 **launch command**
 
-    docker run -it --net=host -v /var/run/docker.sock:/var/run/docker.sock --label io.rancher.container.network=true --label io.rancher.container.dns=true  --name=registrator rancher-registrator
+    docker run -it --net=host -v /var/run/docker.sock:/var/run/docker.sock --label io.rancher.container.network=false --label io.rancher.container.dns=true  --name=registrator rancher-registrator
 
 
 **Optional environment vars**
