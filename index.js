@@ -127,7 +127,7 @@ function checkForServiceTagsLabel(input){
         function(resolve,reject){
             if(input.metadata.labels.SERVICE_TAGS){
                 console.log("Service_Tags found");
-                input.metadata.service_tags = input.metadata.labels.SERVICE_NAME.split(",");
+                input.metadata.service_tags = input.metadata.labels.SERVICE_TAGS.split(",");
             }
             resolve(input)
         }
