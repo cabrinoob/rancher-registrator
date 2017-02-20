@@ -12,7 +12,7 @@ For now, Rancher-registrator only registers its service into Consul backend. **E
 
 Rancher-registrator is made to be launched from **Rancher**. It needs to be started in networking mode "host" and with 2 rancher labels : 
 
- - -l io.rancher.container.network=true
+ - -l io.rancher.container.network=false
  - -l io.rancher.container.dns=true
 
 It also needs to be mapped on the docker.sock file of the host :
