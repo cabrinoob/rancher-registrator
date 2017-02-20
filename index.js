@@ -21,14 +21,17 @@ emitter.on('start', function(evt){
     console.log(new Date() + ' - container start ' + name + ' (image : '+evt.Actor.Attributes.image+')');
 
     getMetaData(name)
+        .then(getAgentIP)
         .then(checkForPortMapping)
-        .then(checkForServiceIgnoreLabel)
-        .then(checkForServiceNameLabel)
-        .then(checkForServiceTagsLabel)
-        .then(checkForHealthCheckLabel)
-        .then(registerService)
+        //.then(checkForServiceIgnoreLabel)
+        //.then(checkForServiceNameLabel)
+        //.then(checkForServiceTagsLabel)
+        //.then(checkForHealthCheckLabel)
+        //.then(registerService)
         .then(function (value) {
             console.log(value);
+            console.log(value.metadata.hostIP);
+            console.log(value.metadata.portMapping);
         }).catch(function(err){
             console.log("ERROR : " + err);
         })
@@ -75,6 +78,29 @@ function getMetaData(servicename){
     )
 }
 
+function getAgentIP(input){
+    return new Promise(
+        function(resolve,reject){
+            var query = {
+                "method":"GET",
+                "url": "http://rancher-metadata/latest/self/host",
+                "headers":{
+                    "accept" : "application/json"
+                }
+            }
+
+            request(query,function (error, response, body) {
+                if (error) {
+                    reject("getAgentIP error : " + error);
+                }
+
+                input.metadata.hostIP = JSON.parse(body).agent_ip;
+                resolve(input);
+            })
+        }
+    )
+}
+
 function checkForPortMapping(input){
     return new Promise(
         function(resolve,reject){
@@ -83,7 +109,8 @@ function checkForPortMapping(input){
                 input.metadata.ports.forEach(function(pm){
                     var portMapping = pm.split(":");
                     var internal = portMapping[2].split("/");
-                    input.metadata.portMapping.push({"address":portMapping[0],"publicPort":portMapping[1],"privatePort":internal[0],"transport":internal[1]});
+                    var ip = input.metadata.hostIP;
+                    input.metadata.portMapping.push({"address":ip,"publicPort":portMapping[1],"privatePort":internal[0],"transport":internal[1]});
                 })
                 resolve(input);
             }
