@@ -19,23 +19,19 @@ emitter.on('start', function(evt){
 
     var name = evt.Actor.Attributes['io.rancher.container.name'] || evt.Actor.Attributes.name;
     console.log(new Date() + ' - container start ' + name + ' (image : '+evt.Actor.Attributes.image+')');
-
     getMetaData(name)
         .then(getAgentIP)
         .then(checkForPortMapping)
-        //.then(checkForServiceIgnoreLabel)
-        //.then(checkForServiceNameLabel)
-        //.then(checkForServiceTagsLabel)
-        //.then(checkForHealthCheckLabel)
-        //.then(registerService)
+        .then(checkForServiceIgnoreLabel)
+        .then(checkForServiceNameLabel)
+        .then(checkForServiceTagsLabel)
+        .then(checkForHealthCheckLabel)
+        .then(registerService)
         .then(function (value) {
             console.log(value);
-            console.log(value.metadata.hostIP);
-            console.log(value.metadata.portMapping);
         }).catch(function(err){
             console.log("ERROR : " + err);
         })
-
 });
 
 emitter.on('stop', function(evt){
@@ -44,6 +40,7 @@ emitter.on('stop', function(evt){
     console.log(new Date() + ' - container start ' + name + ' (image : '+evt.Actor.Attributes.image+')');
 
     getMetaData(name)
+        .then(getAgentIP)
         .then(checkForPortMapping)
         .then(deregisterService)
         .then(function (value) {
