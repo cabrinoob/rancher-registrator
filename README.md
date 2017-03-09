@@ -1,12 +1,12 @@
 ### Introduction
-The aim of this project is to achieve a third party registration in consul for every containers deployed through rancher. Since the release of Rancher v1.2.0 and its migration to the CNI framework, registrator is'nt able to see containers port mappings anymore.
+The aim of this project is to achieve a third party registration in consul for every containers deployed through rancher. Since the release of Rancher v1.2.0 and its migration to the CNI framework, registrator isn't able to see containers port mappings anymore.
 
 Rancher-registrator relies on the docker.sock and the rancher metadata API to do its job.
 
 ### Requierments & limitations
 Rancher-registrator is made to run in a container on each host of your infrastructure. It needs to be deployed alongside a local consul-agent to register its services.
 
-For now, Rancher-registrator only registers its service into Consul backend. **Etcd and Zookeeper are'nt yet supported**.
+For now, Rancher-registrator only registers its service into Consul backend. **Etcd and Zookeeper aren't yet supported**.
 
 ### Instructions
 
@@ -41,7 +41,9 @@ We have ported the very basic labels offered by the original registrator :
 
 **SERVICE_TAGS**: An comma-delimited list of strings used as tags in consul. (note : JSON is not allowed for now)
 
-**SERVICE_[private_port]_CHECK_HTTP** : Allows you to declare an healthcheck at the same time you register your service in consul. The value of this label is the path to check. Exemple :
+**SERVICE_[private_port]_NAME** : Allows you to declare a different service name for different ports
+
+**SERVICE_[private_port]_CHECK_HTTP** : Allows you to declare an healthcheck at the same time you register your service in consul. The value of this label is the path to check. Example :
 
     SERVICE_9000_CHECK_HTTP = /api/ping
 
