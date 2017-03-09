@@ -50,3 +50,11 @@ We have ported the very basic labels offered by the original registrator :
 **SERVICE_[private_port]_CHECK_INTERVAL** : Defines the frequency of the healthCheck. The default value is 10s. 
 
 **SERVICE_[private_port]_CHECK_TIMEOUT** : Defines the timeout from which the healthcheck is considered as "not passing".
+
+### Public docker hub image
+
+This project is automatically build at this address : https://hub.docker.com/r/fmeriot/rancher-registrator/
+
+So you can pull it with 
+
+    docker pull fmeriot/rancher-registrator
