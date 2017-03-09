@@ -153,6 +153,21 @@ function checkForServiceTagsLabel(input){
                 console.log("Service_Tags found");
                 input.metadata.service_tags = input.metadata.labels.SERVICE_TAGS.split(",");
             }
+            port_names = {};
+            for (var key in input.metadata.labels) {
+                if (input.metadata.labels.hasOwnProperty(key)) {
+
+                    //Check if SERVICE_XXX_NAME is there
+                    var checkPattern = /SERVICE_(\d+)_NAME/g;
+                    var checkMatch = checkPattern.exec(key);
+
+                    //indice 1 of checkMatch contains the private port number
+                    if(checkMatch){
+                      port_names[checkMatch[1]] = input.metadata.labels[key]
+                    }
+                }
+            }
+            input.metadata.port_service_names = port_names
             resolve(input)
         }
     )
@@ -244,6 +259,9 @@ function registerService(input){
 
                 var id = input.metadata.uuid + ":" + pm.publicPort;
                 var name = _prefix + input.metadata.service_name;
+                if (input.metadata.port_service_names[pm.privatePort] != undefined) {
+                  name = _prefix + input.metadata.port_service_names[pm.privatePort]
+                }
                 if (pm.transport == "udp")
                     id += ":udp";
 
