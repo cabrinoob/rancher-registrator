@@ -37,7 +37,7 @@ emitter.on('start', function(evt){
 emitter.on('stop', function(evt){
 
     var name = evt.Actor.Attributes['io.rancher.container.name'] || evt.Actor.Attributes.name;
-    console.log(new Date() + ' - container start ' + name + ' (image : '+evt.Actor.Attributes.image+')');
+    console.log(new Date() + ' - container stop ' + name + ' (image : '+evt.Actor.Attributes.image+')');
 
     getMetaData(name)
         .then(getAgentIP)
@@ -101,7 +101,7 @@ function getAgentIP(input){
 function checkForPortMapping(input){
     return new Promise(
         function(resolve,reject){
-            if(input.metadata.ports.length > 0){
+            if(input.metadata.ports && input.metadata.ports.length > 0){
                 input.metadata.portMapping = [];
                 input.metadata.ports.forEach(function(pm){
                     var portMapping = pm.split(":");
