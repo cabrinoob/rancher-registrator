@@ -34,11 +34,10 @@ emitter.on("connect", function() {
 
     getAllMetaData()
         .then(registerContainers)
-        .then(cleanupServices)
         .then(function (value) {
             console.log(value);
         }).catch(function(err){
-            console.log("Cleanup ERROR : " + err);
+            console.log("startup ERROR : " + err);
         })
 });
 
@@ -98,58 +97,39 @@ function getAllMetaData(){
 }
 
 function registerContainers(input) {
-    return new Promise(
-        function(resolve,reject){
-            console.log("registerContainers: " + input.containers.length);
+    var promises = [];
 
-            // find containers that should be registered
-            async.map(input.containers,
-                function(container,callback){
-                    var temp = {};
-                    temp.metadata = container;
-                    temp.servicename = container.name;
+    for (let container of input.containers) {
+        var temp = {};
+        temp.metadata = container;
+        temp.servicename = container.name;
 
-                    tryRegisterContainer(temp)
-                        .then(function(value){
-                            callback(null,value);
-                        }).catch(function(err){
-                            callback(null,err);
-                        });
-                },
-                function(err,results){
-                    console.log("registerContainers finished!");
-
-                    if(err)
-                        console.log(err);
-                    resolve(results);
-                }
-            );
-        }
-    )
+        promises.push(tryRegisterContainer(temp));
+    }
+    
+    return Promise.all(promises)
+        .then(value => {
+            return Promise.resolve(value.flatten().filter(Boolean));
+        });
 }
 
 function tryRegisterContainer(input){
     return new Promise(
-        function(resolve,reject){
-            console.log("tryRegisterContainer: " + input.servicename);
+        function(resolve, reject) {
+            //console.log("tryRegisterContainer: " + input.servicename);
 
-            getAgentIP(input)
-                .then(checkForPortMapping)
-                .then(checkForServiceIgnoreLabel)
-                .then(checkForServiceNameLabel)
-                .then(checkForServiceTagsLabel)
-                .then(checkForHealthCheckLabel)
-                .then(registerService)
-                .then(function (value) {
-                    console.log(value);
-                    // if we made it here the container should be registered
-                    resolve(value)
-                }).catch(function(err){
-                    console.log("ERROR : " + err);
-                    reject(err)
-                });
-        }
-    )
+            resolve(input);
+        })
+        .then(getAgentIP)
+        .then(checkForPortMapping)
+        .then(checkForServiceIgnoreLabel)
+        .then(checkForServiceNameLabel)
+        .then(checkForServiceTagsLabel)
+        .then(checkForHealthCheckLabel)
+        .then(registerService)
+        .catch(function(err){
+            console.log(err);
+        })
 }
 
 function getServiceIDs(input) {
@@ -194,7 +174,7 @@ function getMetaData(servicename){
 function getAgentIP(input){
     return new Promise(
         function(resolve,reject){
-            console.log("getAgentIP: " + input.servicename);
+            //console.log("getAgentIP: " + input.servicename);
 
             var query = {
                 "method":"GET",
@@ -219,7 +199,7 @@ function getAgentIP(input){
 function checkForPortMapping(input){
     return new Promise(
         function(resolve,reject){
-            console.log("checkForPortMapping: " + input.servicename);
+            //console.log("checkForPortMapping: " + input.servicename);
 
             if(input.metadata.ports && input.metadata.ports.length > 0){
                 input.metadata.portMapping = [];
