@@ -9,8 +9,6 @@ var emitter = new DockerEvents({
 var _prefix = process.env.SVC_PREFIX || "";
 var _consulAgent = process.env.LOCAL_CONSUL_AGENT || "http://localhost:8500";
 
-var _re = /^([a-zA-Z0-9][a-zA-Z0-9_.-]+):[0-9]+(?::udp)?$/;
-
 
 Array.prototype.flatten = function() {
     var ret = [];
@@ -29,10 +27,12 @@ emitter.start();
 
 emitter.on("connect", function() {
     console.log("connected to docker api");
-
     console.log("register existing containers");
 
-    getAllMetaData()
+    getServices()
+        .then(deregisterServices)
+        .then(getHostUUID)
+        .then(getHostContainers)
         .then(registerContainers)
         .then(function (value) {
             console.log(value);
@@ -50,19 +50,20 @@ emitter.on('start', function(evt){
         .then(function (value) {
             console.log(value);
         }).catch(function(err){
-            console.log("ERROR : " + err);
+            console.log("Registering ERROR : " + err);
         })
 });
 
 emitter.on('stop', function(evt){
 
     var name = evt.Actor.Attributes['io.rancher.container.name'] || evt.Actor.Attributes.name;
+    var uuid = evt.Actor.Attributes['io.rancher.container.uuid'];
     console.log(new Date() + ' - container stop ' + name + ' (image : '+evt.Actor.Attributes.image+')');
 
-    getMetaData(name)
-        .then(getAgentIP)
-        .then(checkForPortMapping)
-        .then(deregisterService)
+    //console.log(evt);
+
+    getServices(uuid)
+        .then(deregisterServices)
         .then(function (value) {
             console.log(value);
         }).catch(function(err){
@@ -70,10 +71,10 @@ emitter.on('stop', function(evt){
         })
 });
 
-function getAllMetaData(){
+function getHostContainers(hostUUID){
     return new Promise(
         function(resolve,reject){
-            console.log("query for existing containers");
+            //console.log("query for existing containers");
 
             var query = {
                 "method":"GET",
@@ -85,11 +86,15 @@ function getAllMetaData(){
 
             request(query,function (error, response, body) {
                 if (error) {
-                    reject("getAllMetaData error : " + error);
+                    reject("getHostContainers error : " + error);
                 }
 
                 var output = {};
-                output.containers = JSON.parse(body);
+                output.containers = JSON.parse(body).filter(
+                    function(container) {
+                        return container.host_uuid == hostUUID;
+                    }
+                );
                 resolve(output);
             })
         }
@@ -132,20 +137,6 @@ function tryRegisterContainer(input){
         })
 }
 
-function getServiceIDs(input) {
-                            var uniqueIDs = [];
-
-                            input.metadata.portMapping.forEach(function(pm){
-                                var id = input.metadata.uuid + ":" + pm.publicPort;
-
-                                if(pm.transport == "udp")
-                                    id += ":udp";
-                                uniqueIDs.push(id)
-                            });
-
-    return uniqueIDs;
-}
-
 function getMetaData(servicename){
     return new Promise(
         function(resolve,reject){
@@ -166,6 +157,30 @@ function getMetaData(servicename){
                 output.metadata = JSON.parse(body);
                 output.servicename = servicename;
                 resolve(output);
+            })
+        }
+    )
+}
+
+function getHostUUID(){
+    return new Promise(
+        function(resolve,reject){
+            //console.log("getAgentIP: " + input.servicename);
+
+            var query = {
+                "method":"GET",
+                "url": "http://rancher-metadata/latest/self/host",
+                "headers":{
+                    "accept" : "application/json"
+                }
+            }
+
+            request(query,function (error, response, body) {
+                if (error) {
+                    reject("getHostUUID error : " + error);
+                }
+
+                resolve(JSON.parse(body).uuid);
             })
         }
     )
@@ -351,14 +366,6 @@ function checkForHealthCheckLabel(input){
     )
 }
 
-function cleanupServices() {
-    return new Promise(
-        function(resolve,reject) {
-            
-        }
-    )
-}
-
 function registerService(input){
     return new Promise(
         function(resolve,reject){
@@ -429,6 +436,19 @@ function deregisterService(input){
     )
 }
 
+function deregisterServices(uniqueIDs){
+    return new Promise(
+        function(resolve,reject){
+
+            async.map(uniqueIDs,doDeregister,function(err,results){
+                if(err)
+                    console.log(err);
+                resolve(results)
+            });
+        }
+    )
+}
+
 function doRegister(serviceDef,callback){
     var query = {
         "method":"PUT",
@@ -460,12 +480,12 @@ function doDeregister(uuid,callback){
             callback(error,null)
         }
         else{
-            callback(null,uuid +" Service deregistered");
+            callback(null,uuid +" deregistered");
         }
     });
 }
 
-function getServices(input){
+function getServices(uuid){
     return new Promise(
         function(resolve,reject){
             var query = {
@@ -478,17 +498,21 @@ function getServices(input){
                     reject(error)
                 }
                 else{
+                    var guid = '([a-zA-Z0-9][a-zA-Z0-9_.-]+)';
+                    var re = new RegExp('^' + (uuid || guid) + ':[0-9]+(?::udp)?$');
+
                     var output = JSON.parse(body);
 
                     var allServiceIDs = Object.keys(output);
-                    input.serviceIDs = [];
+                    var serviceIDs = [];
+
                     // figure out if these are services we registered
                     for (let id of allServiceIDs) {
                         if (re.test(id)) {
-                            input.serviceIDs.push(id);
+                            serviceIDs.push(id);
                         }
                     }
-                    resolve(input);
+                    resolve(serviceIDs);
                 }
             });
         }
