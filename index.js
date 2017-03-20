@@ -9,10 +9,36 @@ var emitter = new DockerEvents({
 var _prefix = process.env.SVC_PREFIX || "";
 var _consulAgent = process.env.LOCAL_CONSUL_AGENT || "http://localhost:8500";
 
+
+Array.prototype.flatten = function() {
+    var ret = [];
+    for(var i = 0; i < this.length; i++) {
+        if(Array.isArray(this[i])) {
+            ret = ret.concat(this[i].flatten());
+        } else {
+            ret.push(this[i]);
+        }
+    }
+    return ret;
+};
+
+
 emitter.start();
 
 emitter.on("connect", function() {
     console.log("connected to docker api");
+    console.log("register existing containers");
+
+    getServices()
+        .then(deregisterServices)
+        .then(getHostUUID)
+        .then(getHostContainers)
+        .then(registerContainers)
+        .then(function (value) {
+            console.log(value);
+        }).catch(function(err){
+            console.log("startup ERROR : " + err);
+        })
 });
 
 emitter.on('start', function(evt){
@@ -20,6 +46,85 @@ emitter.on('start', function(evt){
     var name = evt.Actor.Attributes['io.rancher.container.name'] || evt.Actor.Attributes.name;
     console.log(new Date() + ' - container start ' + name + ' (image : '+evt.Actor.Attributes.image+')');
     getMetaData(name)
+        .then(tryRegisterContainer)
+        .then(function (value) {
+            console.log(value);
+        }).catch(function(err){
+            console.log("Registering ERROR : " + err);
+        })
+});
+
+emitter.on('stop', function(evt){
+
+    var name = evt.Actor.Attributes['io.rancher.container.name'] || evt.Actor.Attributes.name;
+    var uuid = evt.Actor.Attributes['io.rancher.container.uuid'];
+    console.log(new Date() + ' - container stop ' + name + ' (image : '+evt.Actor.Attributes.image+')');
+
+    //console.log(evt);
+
+    getServices(uuid)
+        .then(deregisterServices)
+        .then(function (value) {
+            console.log(value);
+        }).catch(function(err){
+            console.log("Deregistering ERROR : " + err);
+        })
+});
+
+function getHostContainers(hostUUID){
+    return new Promise(
+        function(resolve,reject){
+            //console.log("query for existing containers");
+
+            var query = {
+                "method":"GET",
+                "url": "http://rancher-metadata/latest/containers",
+                "headers":{
+                    "accept" : "application/json"
+                }
+            }
+
+            request(query,function (error, response, body) {
+                if (error) {
+                    reject("getHostContainers error : " + error);
+                }
+
+                var output = {};
+                output.containers = JSON.parse(body).filter(
+                    function(container) {
+                        return container.host_uuid == hostUUID;
+                    }
+                );
+                resolve(output);
+            })
+        }
+    )
+}
+
+function registerContainers(input) {
+    var promises = [];
+
+    for (let container of input.containers) {
+        var temp = {};
+        temp.metadata = container;
+        temp.servicename = container.name;
+
+        promises.push(tryRegisterContainer(temp));
+    }
+    
+    return Promise.all(promises)
+        .then(value => {
+            return Promise.resolve(value.flatten().filter(Boolean));
+        });
+}
+
+function tryRegisterContainer(input){
+    return new Promise(
+        function(resolve, reject) {
+            //console.log("tryRegisterContainer: " + input.servicename);
+
+            resolve(input);
+        })
         .then(getAgentIP)
         .then(checkForPortMapping)
         .then(checkForServiceIgnoreLabel)
@@ -27,28 +132,10 @@ emitter.on('start', function(evt){
         .then(checkForServiceTagsLabel)
         .then(checkForHealthCheckLabel)
         .then(registerService)
-        .then(function (value) {
-            console.log(value);
-        }).catch(function(err){
-            console.log("ERROR : " + err);
+        .catch(function(err){
+            console.log(err);
         })
-});
-
-emitter.on('stop', function(evt){
-
-    var name = evt.Actor.Attributes['io.rancher.container.name'] || evt.Actor.Attributes.name;
-    console.log(new Date() + ' - container stop ' + name + ' (image : '+evt.Actor.Attributes.image+')');
-
-    getMetaData(name)
-        .then(getAgentIP)
-        .then(checkForPortMapping)
-        .then(deregisterService)
-        .then(function (value) {
-            console.log(value);
-        }).catch(function(err){
-            console.log("Deregistering ERROR : " + err);
-        })
-});
+}
 
 function getMetaData(servicename){
     return new Promise(
@@ -75,9 +162,35 @@ function getMetaData(servicename){
     )
 }
 
+function getHostUUID(){
+    return new Promise(
+        function(resolve,reject){
+            //console.log("getAgentIP: " + input.servicename);
+
+            var query = {
+                "method":"GET",
+                "url": "http://rancher-metadata/latest/self/host",
+                "headers":{
+                    "accept" : "application/json"
+                }
+            }
+
+            request(query,function (error, response, body) {
+                if (error) {
+                    reject("getHostUUID error : " + error);
+                }
+
+                resolve(JSON.parse(body).uuid);
+            })
+        }
+    )
+}
+
 function getAgentIP(input){
     return new Promise(
         function(resolve,reject){
+            //console.log("getAgentIP: " + input.servicename);
+
             var query = {
                 "method":"GET",
                 "url": "http://rancher-metadata/latest/self/host",
@@ -101,6 +214,8 @@ function getAgentIP(input){
 function checkForPortMapping(input){
     return new Promise(
         function(resolve,reject){
+            //console.log("checkForPortMapping: " + input.servicename);
+
             if(input.metadata.ports && input.metadata.ports.length > 0){
                 input.metadata.portMapping = [];
                 input.metadata.ports.forEach(function(pm){
@@ -113,7 +228,7 @@ function checkForPortMapping(input){
             }
             else
             {
-                reject("No need to register this service")
+                reject("No port mappings for " + input.servicename)
             }
         }
     )
@@ -124,7 +239,7 @@ function checkForServiceIgnoreLabel(input){
         function(resolve,reject){
             if(input.metadata.labels.SERVICE_IGNORE){
                 console.log("Service_Ignore found");
-                reject("Service ignored");
+                reject("Service ignored " + input.servicename);
             }
             else {
                 resolve(input)
@@ -254,6 +369,8 @@ function checkForHealthCheckLabel(input){
 function registerService(input){
     return new Promise(
         function(resolve,reject){
+            console.log("registerService: " + input.servicename);
+
             var serviceDefs = [];
             input.metadata.portMapping.forEach(function(pm) {
 
@@ -319,6 +436,19 @@ function deregisterService(input){
     )
 }
 
+function deregisterServices(uniqueIDs){
+    return new Promise(
+        function(resolve,reject){
+
+            async.map(uniqueIDs,doDeregister,function(err,results){
+                if(err)
+                    console.log(err);
+                resolve(results)
+            });
+        }
+    )
+}
+
 function doRegister(serviceDef,callback){
     var query = {
         "method":"PUT",
@@ -350,7 +480,41 @@ function doDeregister(uuid,callback){
             callback(error,null)
         }
         else{
-            callback(null,uuid +" Service deregistered");
+            callback(null,uuid +" deregistered");
         }
     });
+}
+
+function getServices(uuid){
+    return new Promise(
+        function(resolve,reject){
+            var query = {
+                "method":"GET",
+                "url": _consulAgent + "/v1/agent/services",
+            };
+
+            request(query,function (error, response, body) {
+                if (error) {
+                    reject(error)
+                }
+                else{
+                    var guid = '([a-zA-Z0-9][a-zA-Z0-9_.-]+)';
+                    var re = new RegExp('^' + (uuid || guid) + ':[0-9]+(?::udp)?$');
+
+                    var output = JSON.parse(body);
+
+                    var allServiceIDs = Object.keys(output);
+                    var serviceIDs = [];
+
+                    // figure out if these are services we registered
+                    for (let id of allServiceIDs) {
+                        if (re.test(id)) {
+                            serviceIDs.push(id);
+                        }
+                    }
+                    resolve(serviceIDs);
+                }
+            });
+        }
+    )
 }
