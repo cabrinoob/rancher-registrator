@@ -5,6 +5,7 @@ var DockerEvents = require('docker-events'),
 var emitter = new DockerEvents({
     docker: new Dockerode({socketPath: '/var/run/docker.sock'}),
 });
+var jsonQuery = require('json-query')
 
 var _prefix = process.env.SVC_PREFIX || "";
 var _consulAgent = process.env.LOCAL_CONSUL_AGENT || "http://localhost:8500";
@@ -376,13 +377,15 @@ function registerService(input){
 
                 var id = input.metadata.uuid + ":" + pm.publicPort;
                 var name = _prefix + input.metadata.service_name;
+                var hasPortName = false;
                 if (input.metadata.port_service_names[pm.privatePort] != undefined) {
                   name = _prefix + input.metadata.port_service_names[pm.privatePort]
+                  hasPortName = true;
                 }
                 if (pm.transport == "udp")
                     id += ":udp";
 
-                if (input.metadata.portMapping.length > 1)
+                if (input.metadata.portMapping.length > 1 && !hasPortName)
                     name += "-" + pm.privatePort;
 
                 var definition = {
